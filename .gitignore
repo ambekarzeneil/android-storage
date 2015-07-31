@@ -1,0 +1,10 @@
+# Intellij Stuff
+.idea/
+*.iml
+
+# IntelliJ
+/out/
+
+## File-based project format:
+*.ipr
+*.iws
