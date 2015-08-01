@@ -1,12 +1,12 @@
 package com.zva.android.data.annotations;
 
-import com.zva.android.commonLib.serialization.SerializationService;
-import com.zva.android.commonLib.serialization.impl.Serializers;
-
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+
+import com.zva.android.commonLib.serialization.SerializationService;
+import com.zva.android.commonLib.serialization.impl.Serializers;
 
 /**
  * Copyright CoreStorage 2015
@@ -14,6 +14,6 @@ import java.lang.annotation.Target;
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-public @interface CoreStorage {
+public @interface CoreStorageEntity {
     SerializationService defaultSerializer = Serializers.getProtostuffSerializer();
 }

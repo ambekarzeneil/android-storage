@@ -2,9 +2,20 @@
 .idea/
 *.iml
 
+
 # IntelliJ
 /out/
+target/
 
 ## File-based project format:
 *.ipr
 *.iws
+
+## Test App Exclude
+.gradle
+/local.properties
+.DS_Store
+build/
+
+# Java Stuff
+gradle-wrapper.jar

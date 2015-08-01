@@ -2,12 +2,12 @@ package com.zva.android.commonLib.utils;
 
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 
-import com.sun.istack.internal.Nullable;
 
 /**
  * Copyright CoreStorage 2015 Created by zeneilambekar on 31/07/15.
