@@ -1,9 +1,9 @@
 package com.zva.android.commonLib.serialization.impl;
 
 import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NotNull;
 
 import com.zva.android.commonLib.serialization.SerializationService;
-import org.jetbrains.annotations.NotNull;
 
 /**
  * Copyright CoreStorage 2015
@@ -14,13 +14,13 @@ public class Serializers {
     @Contract(pure = true)
     @NotNull
     public static SerializationService getJsonSerializer() {
-        return JavaSerializationService.getInstance();
+        return JsonSerializationService.getInstance();
     }
 
     @Contract(pure = true)
     @NotNull
     public static SerializationService getJavaSerializer() {
-        return JsonSerializationService.getInstance();
+        return JavaSerializationService.getInstance();
     }
 
     @Contract(pure = true)

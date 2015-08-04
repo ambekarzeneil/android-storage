@@ -100,8 +100,11 @@ class SqlHelper extends SQLiteOpenHelper {
             case STRING:
                 return "VARCHAR(120)";
 
-            case NUMBER:
+            case INTEGER:
                 return "INTEGER";
+
+            case LONG:
+                return "BIGINT";
 
             case BOOLEAN:
                 return "TINYINT";
@@ -117,7 +120,7 @@ class SqlHelper extends SQLiteOpenHelper {
 
     }
 
-    public static class Builder {
+    public static class Builder implements Cloneable {
         private Map<String, String>                         tableNameToPrimaryKeyNameMap              = new HashMap<>();
 
         private Context                                     applicationContext;
@@ -160,6 +163,11 @@ class SqlHelper extends SQLiteOpenHelper {
         public Builder setDatabaseName(String databaseName) {
             this.databaseName = databaseName;
             return this;
+        }
+
+        @Override
+        protected Object clone() throws CloneNotSupportedException {
+            return super.clone();
         }
 
         public Builder copy() {

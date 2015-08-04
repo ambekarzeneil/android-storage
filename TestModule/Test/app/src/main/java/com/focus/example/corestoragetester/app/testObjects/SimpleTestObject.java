@@ -31,6 +31,9 @@ public class SimpleTestObject {
     @QueryColumn
     private Date                                     createdAt;
 
+    @QueryColumn(sqlType = "VARCHAR(20)")
+    private String                                   customString;
+
     private transient String                         transientData;
 
     private Map<String, String>                      stringToStringMap;
@@ -180,5 +183,14 @@ public class SimpleTestObject {
         result = 31 * result + (stringToClassMap != null ? stringToClassMap.hashCode() : 0);
         result = 31 * result + (complexDataStructure != null ? complexDataStructure.hashCode() : 0);
         return result;
+    }
+
+    public String getCustomString() {
+        return customString;
+    }
+
+    public SimpleTestObject setCustomString(String customString) {
+        this.customString = customString;
+        return this;
     }
 }

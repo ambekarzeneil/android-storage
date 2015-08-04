@@ -72,8 +72,14 @@ public class StringUtils {
         return string == null || string.isEmpty();
     }
 
+    @Contract(value = "!null, _, _->!null; null, _, _->null", pure = true)
+    public static String replace(String text, String searchString, String replacement) {
+        return org.apache.commons.lang3.StringUtils.replace(text, searchString, replacement);
+    }
+
     @Contract(value = "null -> null", pure = true)
     public static String capitalize(String stringToCapitalize) {
+
         if (isEmpty(stringToCapitalize)) {
             return stringToCapitalize;
         }
@@ -96,5 +102,29 @@ public class StringUtils {
         }
 
         return phrase;
+    }
+
+    @Contract("null, _->null; !null, !null ->!null; !null, null -> null")
+    public static String join(String[] parts, String joiningString) {
+
+        StringBuilder joinedString = new StringBuilder();
+
+        if (parts == null)
+            return null;
+
+        if (joiningString == null)
+            return null;
+
+        for (String part : parts)
+            joinedString.append(part).append(joiningString);
+
+        return joinedString.toString();
+
+    }
+
+    public static String getBasePackageName(Class<?> candidateClass) {
+        String candidateClassName = candidateClass.getName();
+
+        return candidateClassName.substring(0, candidateClassName.lastIndexOf("."));
     }
 }

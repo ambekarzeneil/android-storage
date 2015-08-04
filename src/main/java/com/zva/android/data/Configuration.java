@@ -16,7 +16,7 @@ public class Configuration {
     }
 
     private List<String>               basePackageNames;
-    private Class<?>                   basePackageClasses;
+    private List<Class<?>>             basePackageClasses;
     private String                     databaseName;
     private String                     databasePath;
     private int                        databaseVersion;
@@ -35,11 +35,11 @@ public class Configuration {
         return this;
     }
 
-    public Class<?> getBasePackageClasses() {
+    public List<Class<?>> getBasePackageClasses() {
         return basePackageClasses;
     }
 
-    public Configuration setBasePackageClasses(Class<?> basePackageClasses) {
+    public Configuration setBasePackageClasses(List<Class<?>> basePackageClasses) {
         this.basePackageClasses = basePackageClasses;
         return this;
     }

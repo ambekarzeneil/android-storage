@@ -1,21 +1,28 @@
 package com.zva.android.data;
 
+import java.io.Serializable;
+
 /**
  * Copyright CoreStorage 2015 Created by zeneilambekar on 04/08/15.
  */
-class QueryPropertyTypeWrapper {
+class QueryPropertyTypeWrapper implements Serializable {
+
+    private static final long serialVersionUID = 1340390683692239794L;
 
     private QueryPropertyType queryPropertyType;
 
     private String            customSqlProperty;
 
+    private Class<?>          customClass;
+
     public QueryPropertyTypeWrapper(QueryPropertyType queryPropertyType) {
         this.queryPropertyType = queryPropertyType;
     }
 
-    public QueryPropertyTypeWrapper(String customSqlProperty) {
+    public QueryPropertyTypeWrapper(String customSqlProperty, Class<?> type) {
         queryPropertyType = QueryPropertyType.CUSTOM;
         this.customSqlProperty = customSqlProperty;
+        this.customClass = type;
     }
 
     public QueryPropertyType getQueryPropertyType() {
@@ -59,5 +66,13 @@ class QueryPropertyTypeWrapper {
         int result = queryPropertyType != null ? queryPropertyType.hashCode() : 0;
         result = 31 * result + (customSqlProperty != null ? customSqlProperty.hashCode() : 0);
         return result;
+    }
+
+    public Class<?> getCustomClass() {
+        return customClass;
+    }
+
+    public void setCustomClass(Class<?> customClass) {
+        this.customClass = customClass;
     }
 }
