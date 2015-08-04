@@ -11,6 +11,9 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
 public @interface QueryColumn {
-    String  name    = "";
-    boolean indexed = false;
+    String name() default "";
+
+    boolean indexed() default false;
+
+    String sqlType() default "";
 }

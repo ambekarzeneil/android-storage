@@ -3,12 +3,18 @@ package com.zva.android.data;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Collections;
-import java.util.List;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Contract;
 
 import android.content.Context;
@@ -18,27 +24,51 @@ import android.util.Log;
 import com.zva.android.commonLib.serialization.SerializationService;
 import com.zva.android.commonLib.serialization.exception.SerializationException;
 import com.zva.android.commonLib.serialization.impl.Serializers;
+import com.zva.android.commonLib.utils.CollectionUtils;
 import com.zva.android.commonLib.utils.PackageUtils;
+import com.zva.android.commonLib.utils.core.Filter;
+import com.zva.android.data.annotations.CoreStorageEntity;
+import com.zva.android.data.annotations.PrimaryKey;
+import com.zva.android.data.annotations.QueryColumn;
 import com.zva.android.data.interfaces.CoreStorageDao;
 
 /**
  * Copyright CoreStorage 2015 Created by zeneilambekar on 31/07/15.
  */
-public class CoreStorageHelper {
+public class CoreStorageHelper implements ISqlHelperDelegate {
 
-    private static final String                         TAG = "DataHelper";
+    private static final String                                TAG                                                       = "DataHelper";
 
-    private volatile boolean                            isReady;
+    private volatile boolean                                   isReady;
 
-    private Map<String, Map<String, QueryPropertyType>> classNameToQueryPropertyNameToQueryPropertyTypeMap;
-    private Map<String, String>                         classNameToPrimaryKeyFieldNameMap;
-    private Map<String, Method>                         classNameToPrimaryKeyGetterMap;
-    private Map<String, Method>                         classNameToPrimaryKeySetterMap;
-    private Context                                     applicationContext;
-    private long                                        version;
+    private Map<String, Map<String, QueryPropertyTypeWrapper>> classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap = new HashMap<>();
+
+    private Map<String, String>                                classNameToPrimaryKeyFieldNameMap                         = new HashMap<>();
+
+    private Map<String, Method>                                classNameToPrimaryKeyGetterMap                            = new HashMap<>();
+
+    private Map<String, Map<String, Method>>                   classNameToPropertyNameToGetterMap                        = new HashMap<>();
+
+    private Map<Class<?>, String>                              classToTableNameMap                                       = new HashMap<>();
+
+    private Map<String, Method>                                classNameToPrimaryKeySetterMap                            = new HashMap<>();
+
+    private Map<String, DatabaseType>                          classNameToDatabaseTypeMap                                = new HashMap<>();
+
+    private Context                                            applicationContext;
+
+    private int                                                version;
+
+    private SqlHelper                                          privateDatabaseSqlHelper;
+
+    private SqlHelper                                          publicDatabaseSqlHelper;
 
     private CoreStorageHelper() {
         /* Required Private Constructor to prevent initiation outside getInstance()*/
+    }
+
+    public static void init(Context applicationContext) {
+        init(applicationContext, Configuration.getDefaultConfiguration());
     }
 
     public static void init(Context applicationContext, Configuration configuration) {
@@ -49,14 +79,15 @@ public class CoreStorageHelper {
 
             SingletonHolder.singletonInstance.applicationContext = applicationContext;
 
-            if (inspectApplicationContext())
-                return;
+            boolean previouslyInitialized = inspectApplicationContext();
 
-            scanClasses(configuration);
+            if (!previouslyInitialized)
+                scanClasses(configuration);
 
-            createDatabase();
+            createDatabase(configuration);
 
-            storeSettings();
+            if (!previouslyInitialized)
+                storeSettings();
 
             SingletonHolder.singletonInstance.isReady = true;
 
@@ -87,26 +118,121 @@ public class CoreStorageHelper {
 
     }
 
-    private static void createDatabase() {
+    private static void createDatabase(Configuration configuration) {
 
-        throw new IllegalStateException("Method incomplete");
+        CoreStorageHelper instance = SingletonHolder.singletonInstance;
+
+        SqlHelper.Builder privateDatabaseBuilder = SqlHelper.builder().setApplicationContext(instance.applicationContext).setDatabaseName(configuration.getDatabaseName()).setDatabasePath(
+                configuration.getDatabasePath()).setDatabaseVersion(instance.version).setSqlHelperDelegate(instance);
+
+        SqlHelper.Builder publicDatabaseBuilder = privateDatabaseBuilder.copy();
+
+        publicDatabaseBuilder.setPrivateDatabase(false);
+        privateDatabaseBuilder.setPrivateDatabase(true);
+
+        instance.privateDatabaseSqlHelper = privateDatabaseBuilder.build();
+
+        if (configuration.isEnablePublicDatabase())
+            instance.publicDatabaseSqlHelper = publicDatabaseBuilder.build();
 
     }
 
     private static void scanClasses(Configuration configuration) {
 
-        throw new IllegalStateException("Method incomplete");
+        Set<Class<?>> potentialCoreStorageClasses = HelperUtils.getCoreStorageClasses(configuration);
+
+        for (Class<?> potentialStorageClass : potentialCoreStorageClasses) {
+            CoreStorageEntity coreStorageEntityAnnotation = potentialStorageClass.getAnnotation(CoreStorageEntity.class);
+            if (coreStorageEntityAnnotation != null)
+                try {
+                    loadClass(potentialStorageClass, coreStorageEntityAnnotation);
+                } catch (NoSuchMethodException e) {
+                    throw new IllegalStateException(String.format("Invalid CoreStorageEntity class '%s'", potentialStorageClass.getName()), e);
+
+                }
+        }
 
     }
 
-    @Contract(pure = true)
-    public static boolean hello() {
-        return true;
+    private static void loadClass(Class<?> storageClass, CoreStorageEntity coreStorageEntityAnnotation) throws NoSuchMethodException {
+
+        String effectiveTableName = HelperUtils.getTableName(storageClass);
+
+        CoreStorageHelper instance = SingletonHolder.singletonInstance;
+
+        instance.classToTableNameMap.put(storageClass, effectiveTableName);
+
+        instance.classNameToDatabaseTypeMap.put(effectiveTableName, coreStorageEntityAnnotation.shared() ? DatabaseType.SHARED : DatabaseType.PRIVATE);
+
+        HashMap<String, QueryPropertyTypeWrapper> propertyMap = new HashMap<>();
+        instance.classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap.put(effectiveTableName, propertyMap);
+
+        HashMap<String, Method> propertyGetterMap = new HashMap<>();
+        instance.classNameToPropertyNameToGetterMap.put(effectiveTableName, propertyGetterMap);
+
+        //Methods:
+
+        Field[] declaredFields = storageClass.getDeclaredFields();
+
+        for (Field field : declaredFields) {
+            String fieldName = field.getName();
+            for (Annotation annotation : field.getAnnotations()) {
+
+                if (annotation instanceof PrimaryKey) {
+                    instance.classNameToPrimaryKeyFieldNameMap.put(effectiveTableName, fieldName);
+                    instance.classNameToPrimaryKeyGetterMap.put(effectiveTableName, getMethodForProperty(storageClass, fieldName, null, true));
+                    instance.classNameToPrimaryKeySetterMap.put(effectiveTableName, getMethodForProperty(storageClass, fieldName, field.getType(), false));
+                }
+
+                if (annotation instanceof PrimaryKey || annotation instanceof QueryColumn) {
+
+                    QueryPropertyTypeWrapper queryPropertyTypeWrapper = null;
+
+                    if (annotation instanceof QueryColumn) {
+                        QueryColumn queryColumnAnnotation = (QueryColumn) annotation;
+                        String sqlType = queryColumnAnnotation.sqlType();
+                        if (!com.zva.android.commonLib.utils.StringUtils.isEmpty(sqlType))
+                            queryPropertyTypeWrapper = new QueryPropertyTypeWrapper(sqlType);
+
+                    }
+
+                    if (queryPropertyTypeWrapper == null)
+                        queryPropertyTypeWrapper = new QueryPropertyTypeWrapper(getQueryPropertyType(field.getType()));
+
+                    propertyMap.put(fieldName, queryPropertyTypeWrapper);
+                    propertyGetterMap.put(fieldName, getMethodForProperty(storageClass, fieldName, null, true));
+                }
+
+            }
+
+        }
+
+    }
+
+    private static QueryPropertyType getQueryPropertyType(Class<?> type) {
+        if (type.isAssignableFrom(String.class))
+            return QueryPropertyType.STRING;
+
+        if (type.isAssignableFrom(Date.class))
+            return QueryPropertyType.DATE;
+
+        if (type.isAssignableFrom(Integer.class) || type.isAssignableFrom(Long.class))
+            return QueryPropertyType.NUMBER;
+
+        throw new IllegalArgumentException(String.format("Cannot accept QueryPropertyType of class '%s'", type.getName()));
+
+    }
+
+    private static Method getMethodForProperty(Class<?> concernedClass, String fieldName, Class<?> type, boolean getter) throws NoSuchMethodException {
+        return concernedClass.getMethod((getter ? "get" : "set") + StringUtils.capitalize(fieldName), getter ? null : type);
     }
 
     private static boolean inspectApplicationContext() {
 
-        Context applicationContext = SingletonHolder.singletonInstance.applicationContext;
+        CoreStorageHelper instance = SingletonHolder.singletonInstance;
+
+        Context applicationContext = instance.applicationContext;
+        instance.version = PackageUtils.getApplicationMetaData(applicationContext, "VERSION", 0);
 
         SharedPreferences preferences = applicationContext.getSharedPreferences("DataHelper", Context.MODE_PRIVATE);
 
@@ -127,10 +253,10 @@ public class CoreStorageHelper {
             return false;
         }
 
-        if (PackageUtils.getApplicationMetaData(applicationContext, "VERSION", 0L) > store.version)
+        if (instance.version > store.version)
             return false;
 
-        store.populateHelper(SingletonHolder.singletonInstance);
+        store.populateHelper(instance);
 
         return true;
 
@@ -150,72 +276,52 @@ public class CoreStorageHelper {
         throw new IllegalStateException("Method incomplete");
     }
 
+    @Override
+    public String getSqlType(String tableName, String fieldName) {
+        return classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap.get(tableName).get(fieldName).getCustomSqlProperty();
+    }
+
+    @Override
+    public Set<String> getTableNames(final DatabaseType databaseType) {
+        return new LinkedHashSet<>(CollectionUtils.filter(classNameToDatabaseTypeMap.keySet(), new Filter<String>() {
+            @Override
+            public boolean test(String object) {
+                return classNameToDatabaseTypeMap.get(object) == databaseType;
+            }
+        }));
+    }
+
+    @Override
+    public String getPrimaryKeyFieldName(String tableName) {
+        return classNameToPrimaryKeyFieldNameMap.get(tableName);
+    }
+
+    @Override
+    public Set<String> getQueryColumnNames(String tableName) {
+        return classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap.get(tableName).keySet();
+    }
+
+    @Override
+    public QueryPropertyType getQueryColumnType(String tableName, String queryColumnName) {
+        return classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap.get(tableName).get(queryColumnName).getQueryPropertyType();
+    }
+
     private static class SingletonHolder {
 
         private static final CoreStorageHelper singletonInstance = new CoreStorageHelper();
 
     }
 
-    public static class Configuration {
-
-        private List<String> basePackageNames;
-        private Class<?>     basePackageClasses;
-
-        public List<String> getBasePackageNames() {
-            return basePackageNames;
-        }
-
-        public Configuration setBasePackageNames(List<String> basePackageNames) {
-            this.basePackageNames = basePackageNames;
-            return this;
-        }
-
-        public Class<?> getBasePackageClasses() {
-            return basePackageClasses;
-        }
-
-        public Configuration setBasePackageClasses(Class<?> basePackageClasses) {
-            this.basePackageClasses = basePackageClasses;
-            return this;
-        }
-
-        @Override
-        public String toString() {
-            return "Configuration{" + "basePackageNames=" + basePackageNames + ", basePackageClasses=" + basePackageClasses + '}';
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o)
-                return true;
-            if (o == null || getClass() != o.getClass())
-                return false;
-
-            Configuration that = (Configuration) o;
-
-            return !(basePackageNames != null ? !basePackageNames.equals(that.basePackageNames) : that.basePackageNames != null)
-                    && !(basePackageClasses != null ? !basePackageClasses.equals(that.basePackageClasses) : that.basePackageClasses != null);
-
-        }
-
-        @Override
-        public int hashCode() {
-            int result = basePackageNames != null ? basePackageNames.hashCode() : 0;
-            result = 31 * result + (basePackageClasses != null ? basePackageClasses.hashCode() : 0);
-            return result;
-        }
-    }
-
     private static class Store {
 
-        private final Map<String, Map<String, QueryPropertyType>> classNameToQueryPropertyNameToQueryPropertyTypeMap;
-        private final Map<String, String>                         classNameToPrimaryKeyFieldNameMap;
-        private final Map<String, Method>                         classNameToPrimaryKeyGetterMap;
-        private final Map<String, Method>                         classNameToPrimaryKeySetterMap;
-        private final long                                        version;
+        private final Map<String, Map<String, QueryPropertyTypeWrapper>> classNameToQueryPropertyNameToQueryPropertyTypeMap;
+        private final Map<String, String>                                classNameToPrimaryKeyFieldNameMap;
+        private final Map<String, Method>                                classNameToPrimaryKeyGetterMap;
+        private final Map<String, Method>                                classNameToPrimaryKeySetterMap;
+        private final int                                                version;
 
-        public Store(Map<String, Map<String, QueryPropertyType>> classNameToQueryPropertyNameToQueryPropertyTypeMap, Map<String, String> classNameToPrimaryKeyFieldNameMap,
-                Map<String, Method> classNameToPrimaryKeyGetterMap, Map<String, Method> classNameToPrimaryKeySetterMap, long version) {
+        public Store(Map<String, Map<String, QueryPropertyTypeWrapper>> classNameToQueryPropertyNameToQueryPropertyTypeMap, Map<String, String> classNameToPrimaryKeyFieldNameMap,
+                Map<String, Method> classNameToPrimaryKeyGetterMap, Map<String, Method> classNameToPrimaryKeySetterMap, int version) {
             this.classNameToQueryPropertyNameToQueryPropertyTypeMap = classNameToQueryPropertyNameToQueryPropertyTypeMap;
             this.classNameToPrimaryKeyFieldNameMap = classNameToPrimaryKeyFieldNameMap;
             this.classNameToPrimaryKeyGetterMap = classNameToPrimaryKeyGetterMap;
@@ -224,7 +330,7 @@ public class CoreStorageHelper {
         }
 
         public Store(CoreStorageHelper singletonInstance) {
-            this(singletonInstance.classNameToQueryPropertyNameToQueryPropertyTypeMap, singletonInstance.classNameToPrimaryKeyFieldNameMap,
+            this(singletonInstance.classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap, singletonInstance.classNameToPrimaryKeyFieldNameMap,
                     singletonInstance.classNameToPrimaryKeyGetterMap, singletonInstance.classNameToPrimaryKeySetterMap, singletonInstance.version);
         }
 
@@ -233,7 +339,7 @@ public class CoreStorageHelper {
             dataHelper.classNameToPrimaryKeyFieldNameMap = Collections.unmodifiableMap(classNameToPrimaryKeyFieldNameMap);
             dataHelper.classNameToPrimaryKeyGetterMap = Collections.unmodifiableMap(classNameToPrimaryKeyGetterMap);
             dataHelper.classNameToPrimaryKeySetterMap = Collections.unmodifiableMap(classNameToPrimaryKeySetterMap);
-            dataHelper.classNameToQueryPropertyNameToQueryPropertyTypeMap = Collections.unmodifiableMap(classNameToQueryPropertyNameToQueryPropertyTypeMap);
+            dataHelper.classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap = Collections.unmodifiableMap(classNameToQueryPropertyNameToQueryPropertyTypeMap);
             dataHelper.version = version;
 
         }

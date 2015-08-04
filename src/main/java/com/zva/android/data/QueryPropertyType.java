@@ -5,6 +5,6 @@ package com.zva.android.data;
  */
 public enum QueryPropertyType {
 
-    BOOLEAN, STRING, DATE, INTEGER;
+    BOOLEAN, STRING, DATE, NUMBER, CUSTOM;
 
 }

@@ -1,7 +1,6 @@
 package com.focus.example.corestoragetester.app.testObjects;
 
 import com.zva.android.data.annotations.CoreStorageEntity;
-import com.zva.android.data.annotations.Ignored;
 import com.zva.android.data.annotations.PrimaryKey;
 import com.zva.android.data.annotations.QueryColumn;
 
@@ -32,8 +31,7 @@ public class SimpleTestObject {
     @QueryColumn
     private Date                                     createdAt;
 
-    @Ignored
-    private String                                   transientData;
+    private transient String                         transientData;
 
     private Map<String, String>                      stringToStringMap;
 
@@ -140,28 +138,32 @@ public class SimpleTestObject {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         SimpleTestObject that = (SimpleTestObject) o;
 
-        if (keyField != null ? !keyField.equals(that.keyField) : that.keyField != null) return false;
-        if (simpleString != null ? !simpleString.equals(that.simpleString) : that.simpleString != null) return false;
+        if (keyField != null ? !keyField.equals(that.keyField) : that.keyField != null)
+            return false;
+        if (simpleString != null ? !simpleString.equals(that.simpleString) : that.simpleString != null)
+            return false;
         if (simpleBoolean != null ? !simpleBoolean.equals(that.simpleBoolean) : that.simpleBoolean != null)
             return false;
-        if (simpleLong != null ? !simpleLong.equals(that.simpleLong) : that.simpleLong != null) return false;
+        if (simpleLong != null ? !simpleLong.equals(that.simpleLong) : that.simpleLong != null)
+            return false;
         if (nonQueryColumn != null ? !nonQueryColumn.equals(that.nonQueryColumn) : that.nonQueryColumn != null)
             return false;
-        if (createdAt != null ? !createdAt.equals(that.createdAt) : that.createdAt != null) return false;
+        if (createdAt != null ? !createdAt.equals(that.createdAt) : that.createdAt != null)
+            return false;
         if (transientData != null ? !transientData.equals(that.transientData) : that.transientData != null)
             return false;
-        if (stringToStringMap != null ? !stringToStringMap.equals(that.stringToStringMap) : that.stringToStringMap !=
-                null)
+        if (stringToStringMap != null ? !stringToStringMap.equals(that.stringToStringMap) : that.stringToStringMap != null)
             return false;
         if (stringToClassMap != null ? !stringToClassMap.equals(that.stringToClassMap) : that.stringToClassMap != null)
             return false;
-        return !(complexDataStructure != null ? !complexDataStructure.equals(that.complexDataStructure) : that
-                .complexDataStructure != null);
+        return !(complexDataStructure != null ? !complexDataStructure.equals(that.complexDataStructure) : that.complexDataStructure != null);
 
     }
 
