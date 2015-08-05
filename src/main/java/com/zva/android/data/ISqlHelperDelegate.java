@@ -22,4 +22,6 @@ interface ISqlHelperDelegate {
     <T> T inflateObject(String tableName, byte[] serializedObject) throws SerializationException;
 
     <T> Object getQueryColumnValue(T coreStorageObject, String tableName, String columnName);
+
+    <T> byte[] serializeObject(T coreStorageObject) throws SerializationException;
 }

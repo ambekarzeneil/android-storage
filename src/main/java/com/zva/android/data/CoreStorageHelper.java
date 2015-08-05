@@ -33,7 +33,9 @@ import com.zva.android.data.annotations.CoreStorageEntity;
 import com.zva.android.data.annotations.PrimaryKey;
 import com.zva.android.data.annotations.QueryColumn;
 import com.zva.android.data.exception.CoreStorageClassNotCachedException;
+import com.zva.android.data.exception.CoreStorageFindException;
 import com.zva.android.data.exception.CoreStorageReadException;
+import com.zva.android.data.exception.CoreStorageRemoveException;
 import com.zva.android.data.exception.CoreStorageSaveException;
 import com.zva.android.data.exception.CoreStorageWriteException;
 import com.zva.android.data.exception.MalformedClassGetterException;
@@ -335,12 +337,13 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
         return getDatabaseHelper(tableName).getObjectCount(tableName);
     }
 
-    public <T> Set<T> findOne(Class<?> coreStorageClass, String key) throws CoreStorageReadException {
+    public <T> T findOne(Class<? extends T> coreStorageClass, String key) {
         String tableName = getTableName(coreStorageClass);
+
         try {
             return getDatabaseHelper(tableName).get(key, tableName);
-        } catch (SerializationException e) {
-            throw new CoreStorageReadException(e);
+        } catch (CoreStorageReadException | SerializationException e) {
+            throw new CoreStorageFindException(e);
         }
     }
 
@@ -358,7 +361,7 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
         String tableName = classToTableNameMap.get(coreStorageObject.getClass());
         try {
             getDatabaseHelper(tableName).save(coreStorageObject, tableName);
-        } catch (CoreStorageWriteException e) {
+        } catch (SerializationException | CoreStorageWriteException e) {
             throw new CoreStorageSaveException(e);
         }
 
@@ -376,7 +379,7 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
             }
             try {
                 databaseHelper.save(coreStorageObject, tableName);
-            } catch (CoreStorageWriteException e) {
+            } catch (CoreStorageWriteException | SerializationException e) {
                 throw new CoreStorageSaveException(e);
             }
         }
@@ -404,8 +407,21 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
         return remove(key, classToTableNameMap.get(coreStorageObjectClass));
     }
 
+    public <T> boolean removeAll(Class<? extends T> coreStorageObjectClass) {
+        String tableName = classToTableNameMap.get(coreStorageObjectClass);
+        try {
+            return getDatabaseHelper(tableName).truncate(tableName);
+        } catch (CoreStorageWriteException e) {
+            throw new CoreStorageRemoveException(e);
+        }
+    }
+
     private boolean remove(String key, String tableName) {
-        return getDatabaseHelper(tableName).delete(key, tableName);
+        try {
+            return getDatabaseHelper(tableName).delete(key, tableName);
+        } catch (CoreStorageWriteException e) {
+            throw new CoreStorageRemoveException(e);
+        }
     }
 
     private String getTableName(Class<?> coreStorageClass) {
@@ -470,12 +486,17 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
             return serializationService.inflate(serializedObject, (Class<? extends T>) CollectionUtils.find(classToTableNameMap.keySet(), new Filter<Class<?>>() {
                 @Override
                 public boolean test(Class<?> object) {
-                    return false;
+                    return classToTableNameMap.get(object).equals(tableName);
                 }
             }));
         } catch (ClassCastException exception) {
             throw new SerializationException(exception);
         }
+    }
+
+    @Override
+    public <T> byte[] serializeObject(T coreStorageObject) throws SerializationException {
+        return serializationService.serialize(coreStorageObject);
     }
 
     @Override

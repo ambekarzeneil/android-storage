@@ -2,10 +2,8 @@ package com.zva.android.data;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import org.jetbrains.annotations.Contract;
@@ -53,12 +51,28 @@ class SqlHelper extends SQLiteOpenHelper {
         runCreateIfNotExistsQuery(sqLiteDatabase);
     }
 
-    public <T, ID extends Serializable> T get(ID key, String tableName) throws SerializationException {
+    public <T, ID extends Serializable> T get(final ID key, final String tableName) throws SerializationException, CoreStorageReadException {
 
         final String keyFieldName = sqlHelperDelegate.getPrimaryKeyFieldName(tableName);
         final ObjectWrapper<T> objectWrapper = new ObjectWrapper<>();
 
-        throw new IllegalStateException("Method incomplete");
+        try {
+            runInTransaction(false, new TransactionTask() {
+                @Override
+                public void run() throws Exception {
+                    Cursor cursor = targetDb.query(tableName, new String[] { "serialized_object" }, String.format("%s = ?", keyFieldName), new String[] { key.toString() }, null,
+                            null, null);
+
+                    if (cursor.moveToFirst())
+                        objectWrapper.setContainedObject(sqlHelperDelegate.<T> inflateObject(tableName, cursor.getBlob(cursor.getColumnIndex("serialized_object"))));
+
+                }
+            });
+        } catch (CoreStorageWriteException e) {
+            throw new IllegalStateException("Write exception during get", e);
+        }
+
+        return objectWrapper.getContainedObject();
 
     }
 
@@ -91,8 +105,22 @@ class SqlHelper extends SQLiteOpenHelper {
         throw new IllegalStateException("Method incomplete");
     }
 
-    public <ID extends Serializable> boolean delete(ID key, String tableName) {
-        throw new IllegalStateException("Method incomplete");
+    public <ID extends Serializable> boolean delete(final ID key, final String tableName) throws CoreStorageWriteException {
+
+        final boolean[] count = { false };
+        try {
+            runInTransaction(true, new TransactionTask() {
+                @Override
+                public void run() throws Exception {
+                    count[0] = targetDb.delete(tableName, String.format("%s = ?", sqlHelperDelegate.getPrimaryKeyFieldName(tableName)), new String[] { key.toString() }) > 0;
+                }
+            });
+        } catch (CoreStorageReadException e) {
+            throw new IllegalStateException("Read Exception while deleting", e);
+        }
+
+        return count[0];
+
     }
 
     private void runCreateIfNotExistsQuery(SQLiteDatabase sqLiteDatabase) {
@@ -159,6 +187,7 @@ class SqlHelper extends SQLiteOpenHelper {
                 }
             });
         } catch (CoreStorageWriteException | CoreStorageReadException e) {
+            throw new IllegalStateException(e);
         }
 
         return count[0];
@@ -209,7 +238,7 @@ class SqlHelper extends SQLiteOpenHelper {
         }
     }
 
-    public <T> void save(T coreStorageObject, final String tableName) throws CoreStorageWriteException {
+    public <T> void save(T coreStorageObject, final String tableName) throws CoreStorageWriteException, SerializationException {
 
         List<String> queryColumnNames = new ArrayList<>(sqlHelperDelegate.getQueryColumnNames(tableName));
 
@@ -228,47 +257,57 @@ class SqlHelper extends SQLiteOpenHelper {
             valueSpaces.append("?").append(",");
         }
 
+        //Add Object Serialization
+        propertyNames.append("serialized_object");
+        valueObjects.add(sqlHelperDelegate.serializeObject(coreStorageObject));
+        valueSpaces.append("?");
+
         try {
             runInTransaction(false, new TransactionTask() {
                 @Override
                 public void run() throws Exception {
-                    targetDb.execSQL(
-                            String.format(queryString, tableName, propertyNames.substring(0, propertyNames.length() - 1), valueSpaces.substring(0, valueSpaces.length() - 1)),
-                            valueObjects.toArray(new Object[valueObjects.size()]));
+                    targetDb.execSQL(String.format(queryString, tableName, propertyNames.toString(), valueSpaces.toString()), valueObjects.toArray(new Object[valueObjects.size()]));
                 }
             });
         } catch (CoreStorageReadException e) {
             throw new IllegalStateException("Read Exception while writing object", e);
         }
 
-        throw new IllegalStateException("Method incomplete");
+    }
+
+    public boolean truncate(final String tableName) throws CoreStorageWriteException {
+        final boolean[] result = { false };
+        try {
+            runInTransaction(true, new TransactionTask() {
+                @Override
+                public void run() throws Exception {
+                    result[0] = targetDb.delete(tableName, "1", new String[] {}) > 0;
+                }
+            });
+        } catch (CoreStorageReadException e) {
+            throw new IllegalStateException("Read Exception during deleting", e);
+        }
+
+        return result[0];
+
     }
 
     public static class Builder implements Cloneable {
-        private Map<String, String>                         tableNameToPrimaryKeyNameMap              = new HashMap<>();
 
-        private Context                                     applicationContext;
+        private Context            applicationContext;
 
-        private String                                      databaseName;
+        private String             databaseName;
 
-        private int                                         databaseVersion;
+        private int                databaseVersion;
 
-        private String                                      databasePath;
+        private String             databasePath;
 
-        private boolean                                     privateDatabase;
+        private boolean            privateDatabase;
 
-        private Map<String, Map<String, QueryPropertyType>> tableNameToQueryColumnNameToColumnTypeMap = new HashMap<>();
-
-        private ISqlHelperDelegate                          sqlHelperDelegate;
+        private ISqlHelperDelegate sqlHelperDelegate;
 
         public SqlHelper build() {
             return new SqlHelper(this);
-        }
-
-        public Builder addTable(String tableName, String primaryKeyName, Map<String, QueryPropertyType> queryColumnNameToQueryPropertyTypeMap) {
-            tableNameToPrimaryKeyNameMap.put(tableName, primaryKeyName);
-            tableNameToQueryColumnNameToColumnTypeMap.put(tableName, queryColumnNameToQueryPropertyTypeMap);
-            return this;
         }
 
         public Context getApplicationContext() {
@@ -302,8 +341,6 @@ class SqlHelper extends SQLiteOpenHelper {
                 Object clone = super.clone();
                 if (clone instanceof Builder) {
                     builder = (Builder) clone;
-                    builder.tableNameToPrimaryKeyNameMap = new HashMap<>();
-                    builder.tableNameToQueryColumnNameToColumnTypeMap = new HashMap<>();
                 } else {
                     throw new IllegalStateException("Cloned object is not a builder object");
                 }

@@ -135,8 +135,8 @@ public class SimpleTestObject {
     @Override
     public String toString() {
         return "SimpleTestObject{" + "keyField='" + keyField + '\'' + ", simpleString='" + simpleString + '\'' + ", simpleBoolean=" + simpleBoolean + ", simpleLong=" + simpleLong
-                + ", nonQueryColumn='" + nonQueryColumn + '\'' + ", createdAt=" + createdAt + ", transientData='" + transientData + '\'' + ", stringToStringMap="
-                + stringToStringMap + ", stringToClassMap=" + stringToClassMap + ", complexDataStructure=" + complexDataStructure + '}';
+                + ", nonQueryColumn='" + nonQueryColumn + '\'' + ", createdAt=" + createdAt + ", customString='" + customString + '\'' + ", transientData='" + transientData + '\''
+                + ", stringToStringMap=" + stringToStringMap + ", stringToClassMap=" + stringToClassMap + ", complexDataStructure=" + complexDataStructure + '}';
     }
 
     @Override
@@ -148,25 +148,17 @@ public class SimpleTestObject {
 
         SimpleTestObject that = (SimpleTestObject) o;
 
-        if (keyField != null ? !keyField.equals(that.keyField) : that.keyField != null)
-            return false;
-        if (simpleString != null ? !simpleString.equals(that.simpleString) : that.simpleString != null)
-            return false;
-        if (simpleBoolean != null ? !simpleBoolean.equals(that.simpleBoolean) : that.simpleBoolean != null)
-            return false;
-        if (simpleLong != null ? !simpleLong.equals(that.simpleLong) : that.simpleLong != null)
-            return false;
-        if (nonQueryColumn != null ? !nonQueryColumn.equals(that.nonQueryColumn) : that.nonQueryColumn != null)
-            return false;
-        if (createdAt != null ? !createdAt.equals(that.createdAt) : that.createdAt != null)
-            return false;
-        if (transientData != null ? !transientData.equals(that.transientData) : that.transientData != null)
-            return false;
-        if (stringToStringMap != null ? !stringToStringMap.equals(that.stringToStringMap) : that.stringToStringMap != null)
-            return false;
-        if (stringToClassMap != null ? !stringToClassMap.equals(that.stringToClassMap) : that.stringToClassMap != null)
-            return false;
-        return !(complexDataStructure != null ? !complexDataStructure.equals(that.complexDataStructure) : that.complexDataStructure != null);
+        return !(keyField != null ? !keyField.equals(that.keyField) : that.keyField != null)
+                && !(simpleString != null ? !simpleString.equals(that.simpleString) : that.simpleString != null)
+                && !(simpleBoolean != null ? !simpleBoolean.equals(that.simpleBoolean) : that.simpleBoolean != null)
+                && !(simpleLong != null ? !simpleLong.equals(that.simpleLong) : that.simpleLong != null)
+                && !(nonQueryColumn != null ? !nonQueryColumn.equals(that.nonQueryColumn) : that.nonQueryColumn != null)
+                && !(createdAt != null ? !createdAt.equals(that.createdAt) : that.createdAt != null)
+                && !(customString != null ? !customString.equals(that.customString) : that.customString != null)
+                && !(transientData != null ? !transientData.equals(that.transientData) : that.transientData != null)
+                && !(stringToStringMap != null ? !stringToStringMap.equals(that.stringToStringMap) : that.stringToStringMap != null)
+                && !(stringToClassMap != null ? !stringToClassMap.equals(that.stringToClassMap) : that.stringToClassMap != null)
+                && !(complexDataStructure != null ? !complexDataStructure.equals(that.complexDataStructure) : that.complexDataStructure != null);
 
     }
 
@@ -178,6 +170,7 @@ public class SimpleTestObject {
         result = 31 * result + (simpleLong != null ? simpleLong.hashCode() : 0);
         result = 31 * result + (nonQueryColumn != null ? nonQueryColumn.hashCode() : 0);
         result = 31 * result + (createdAt != null ? createdAt.hashCode() : 0);
+        result = 31 * result + (customString != null ? customString.hashCode() : 0);
         result = 31 * result + (transientData != null ? transientData.hashCode() : 0);
         result = 31 * result + (stringToStringMap != null ? stringToStringMap.hashCode() : 0);
         result = 31 * result + (stringToClassMap != null ? stringToClassMap.hashCode() : 0);
