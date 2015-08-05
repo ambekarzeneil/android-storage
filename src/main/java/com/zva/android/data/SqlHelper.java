@@ -1,19 +1,26 @@
 package com.zva.android.data;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 
 import android.content.Context;
+import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
 import com.zva.android.commonLib.serialization.exception.SerializationException;
 import com.zva.android.commonLib.utils.ObjectWrapper;
 import com.zva.android.data.core.QueryGroup;
+import com.zva.android.data.exception.CoreStorageReadException;
+import com.zva.android.data.exception.CoreStorageWriteException;
 
 /**
  * Copyright CoreStorage 2015 Created by zeneilambekar on 31/07/15.
@@ -46,6 +53,48 @@ class SqlHelper extends SQLiteOpenHelper {
         runCreateIfNotExistsQuery(sqLiteDatabase);
     }
 
+    public <T, ID extends Serializable> T get(ID key, String tableName) throws SerializationException {
+
+        final String keyFieldName = sqlHelperDelegate.getPrimaryKeyFieldName(tableName);
+        final ObjectWrapper<T> objectWrapper = new ObjectWrapper<>();
+
+        throw new IllegalStateException("Method incomplete");
+
+    }
+
+    public <T> Iterable<T> get(QueryGroup queryGroup, String tableName) throws SerializationException {
+        throw new IllegalStateException("Method incomplete");
+    }
+
+    public <T> Set<T> getAll(String tableName) {
+        final Set<T> coreStorageObjects = new LinkedHashSet<>();
+        final String keyFieldName = sqlHelperDelegate.getPrimaryKeyFieldName(tableName);
+
+        try {
+            Cursor cursor = getReadableDatabase().query(tableName, new String[] { keyFieldName, "serialized_object" }, null, null, null, null, null);
+
+            if (cursor.moveToFirst()) {
+                while (!cursor.isAfterLast()) {
+                    coreStorageObjects.add(sqlHelperDelegate.<T> inflateObject(tableName, cursor.getBlob(cursor.getColumnIndex("serialized_object"))));
+                    cursor.moveToNext();
+                }
+            }
+
+            cursor.close();
+        } catch (SerializationException ignored) {
+        }
+
+        return coreStorageObjects;
+    }
+
+    public long delete(QueryGroup queryGroup, String tableName) {
+        throw new IllegalStateException("Method incomplete");
+    }
+
+    public <ID extends Serializable> boolean delete(ID key, String tableName) {
+        throw new IllegalStateException("Method incomplete");
+    }
+
     private void runCreateIfNotExistsQuery(SQLiteDatabase sqLiteDatabase) {
 
         for (String tableName : sqlHelperDelegate.getTableNames(databaseType)) {
@@ -70,27 +119,6 @@ class SqlHelper extends SQLiteOpenHelper {
                     stringBuilder.toString()));
         }
 
-    }
-
-    public <T, ID extends Serializable> T get(ID key, String tableName) throws SerializationException {
-
-        final String keyFieldName = sqlHelperDelegate.getPrimaryKeyFieldName(tableName);
-        final ObjectWrapper<T> objectWrapper = new ObjectWrapper<>();
-
-        throw new IllegalStateException("Method incomplete");
-
-    }
-
-    public <T> Iterable<T> get(QueryGroup queryGroup, String tableName) throws SerializationException {
-        throw new IllegalStateException("Method incomplete");
-    }
-
-    public long delete(QueryGroup queryGroup, String tableName) {
-        throw new IllegalStateException("Method incomplete");
-    }
-
-    public <ID extends Serializable> boolean delete(ID key, String tableName) {
-        throw new IllegalStateException("Method incomplete");
     }
 
     @Contract(pure = true)
@@ -118,6 +146,102 @@ class SqlHelper extends SQLiteOpenHelper {
 
         throw new IllegalStateException(String.format("Unknown QueryColumnType '%s'", queryPropertyType));
 
+    }
+
+    public long getObjectCount(final String tableName) {
+        final long count[] = new long[] { -1 };
+
+        try {
+            runInTransaction(false, new TransactionTask() {
+                @Override
+                public void run() throws SerializationException {
+                    count[0] = targetDb.compileStatement("SELECT COUNT(*) FROM " + tableName).simpleQueryForLong();
+                }
+            });
+        } catch (CoreStorageWriteException | CoreStorageReadException e) {
+        }
+
+        return count[0];
+
+    }
+
+    /**
+     * Makes a {@link TransactionTask} run inside a transaction.
+     *
+     * @param write Boolean specifying whether the transaction needs read (false) or read/write (true) access
+     * @param task the to execute
+     * @throws CoreStorageWriteException if the write to database failed because of any IO related access / transfer
+     *             exception
+     * @throws CoreStorageReadException if the read to database failed because of any IO related access / transfer
+     *             exception
+     */
+    public void runInTransaction(boolean write, TransactionTask task) throws CoreStorageWriteException, CoreStorageReadException {
+        SQLiteDatabase targetDatabase = write ? getWritableDatabase() : getReadableDatabase();
+        task.setTargetDb(targetDatabase);
+
+        boolean transactionCleared = false;
+
+        while (!transactionCleared && !Thread.currentThread().isInterrupted()) {
+            try {
+                targetDatabase.beginTransaction();
+            } catch (RuntimeException ignore) {
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e1) {
+                    return;
+                }
+                continue;
+            }
+
+            try {
+                task.run();
+            } catch (Exception e) {
+                if (write)
+                    throw new CoreStorageWriteException(e);
+                else
+                    throw new CoreStorageReadException(e);
+            } finally {
+                targetDatabase.setTransactionSuccessful();
+                targetDatabase.endTransaction();
+            }
+
+            transactionCleared = true;
+        }
+    }
+
+    public <T> void save(T coreStorageObject, final String tableName) throws CoreStorageWriteException {
+
+        List<String> queryColumnNames = new ArrayList<>(sqlHelperDelegate.getQueryColumnNames(tableName));
+
+        final List<Object> valueObjects = new ArrayList<>();
+
+        final String queryString = "INSERT OR REPLACE INTO %s (%s) VALUES (%s);";
+
+        final StringBuilder propertyNames = new StringBuilder();
+        final StringBuilder valueSpaces = new StringBuilder();
+
+        for (String columnName : queryColumnNames) {
+            propertyNames.append(columnName).append(",");
+
+            valueObjects.add(sqlHelperDelegate.getQueryColumnValue(coreStorageObject, tableName, columnName));
+
+            valueSpaces.append("?").append(",");
+        }
+
+        try {
+            runInTransaction(false, new TransactionTask() {
+                @Override
+                public void run() throws Exception {
+                    targetDb.execSQL(
+                            String.format(queryString, tableName, propertyNames.substring(0, propertyNames.length() - 1), valueSpaces.substring(0, valueSpaces.length() - 1)),
+                            valueObjects.toArray(new Object[valueObjects.size()]));
+                }
+            });
+        } catch (CoreStorageReadException e) {
+            throw new IllegalStateException("Read Exception while writing object", e);
+        }
+
+        throw new IllegalStateException("Method incomplete");
     }
 
     public static class Builder implements Cloneable {

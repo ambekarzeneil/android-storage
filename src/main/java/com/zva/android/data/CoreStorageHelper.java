@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Date;
@@ -31,6 +32,11 @@ import com.zva.android.commonLib.utils.core.Filter;
 import com.zva.android.data.annotations.CoreStorageEntity;
 import com.zva.android.data.annotations.PrimaryKey;
 import com.zva.android.data.annotations.QueryColumn;
+import com.zva.android.data.exception.CoreStorageClassNotCachedException;
+import com.zva.android.data.exception.CoreStorageReadException;
+import com.zva.android.data.exception.CoreStorageSaveException;
+import com.zva.android.data.exception.CoreStorageWriteException;
+import com.zva.android.data.exception.MalformedClassGetterException;
 import com.zva.android.data.interfaces.CoreStorageDao;
 
 /**
@@ -39,29 +45,18 @@ import com.zva.android.data.interfaces.CoreStorageDao;
 public class CoreStorageHelper implements ISqlHelperDelegate {
 
     private static final String                                TAG                                                       = "DataHelper";
-
+    private final SerializationService                         serializationService                                      = Serializers.getProtostuffSerializer();
     private volatile boolean                                   isReady;
-
     private Map<String, Map<String, QueryPropertyTypeWrapper>> classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap = new HashMap<>();
-
     private Map<String, String>                                classNameToPrimaryKeyFieldNameMap                         = new HashMap<>();
-
     private Map<String, Method>                                classNameToPrimaryKeyGetterMap                            = new HashMap<>();
-
     private Map<String, Map<String, Method>>                   classNameToPropertyNameToGetterMap                        = new HashMap<>();
-
     private Map<Class<?>, String>                              classToTableNameMap                                       = new HashMap<>();
-
     private Map<String, Method>                                classNameToPrimaryKeySetterMap                            = new HashMap<>();
-
     private Map<String, DatabaseType>                          classNameToDatabaseTypeMap                                = new HashMap<>();
-
     private Context                                            applicationContext;
-
     private int                                                version;
-
     private SqlHelper                                          privateDatabaseSqlHelper;
-
     private SqlHelper                                          publicDatabaseSqlHelper;
 
     private CoreStorageHelper() {
@@ -95,6 +90,18 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
             SingletonHolder.singletonInstance.isReady = true;
 
         }
+
+    }
+
+    @Contract(pure = true)
+    public static CoreStorageHelper getInstance() {
+
+        synchronized (SingletonHolder.singletonInstance) {
+            if (!SingletonHolder.singletonInstance.isReady)
+                throw new IllegalStateException("CoreStorageHelper getInstance() is called without init()");
+        }
+
+        return SingletonHolder.singletonInstance;
 
     }
 
@@ -219,7 +226,7 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
 
     }
 
-    public static void loadGettersAndSetters() {
+    private static void loadGettersAndSetters() {
 
         CoreStorageHelper instance = SingletonHolder.singletonInstance;
 
@@ -323,17 +330,98 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
 
     }
 
-    @Contract(pure = true)
-    public static CoreStorageHelper getInstance() {
+    public long getCount(Class<?> coreStorageClass) {
+        String tableName = getTableName(coreStorageClass);
+        return getDatabaseHelper(tableName).getObjectCount(tableName);
+    }
 
-        synchronized (SingletonHolder.singletonInstance) {
-            if (!SingletonHolder.singletonInstance.isReady)
-                throw new IllegalStateException("CoreStorageHelper getInstance() is called without init()");
+    public <T> Set<T> findOne(Class<?> coreStorageClass, String key) throws CoreStorageReadException {
+        String tableName = getTableName(coreStorageClass);
+        try {
+            return getDatabaseHelper(tableName).get(key, tableName);
+        } catch (SerializationException e) {
+            throw new CoreStorageReadException(e);
+        }
+    }
+
+    public <T> Set<T> findAll(Class<?> coreStorageClass) {
+        String tableName = getTableName(coreStorageClass);
+        return getDatabaseHelper(tableName).getAll(tableName);
+    }
+
+    public <T extends CoreStorageDao> T getDao(Class<? extends T> daoClass) {
+        throw new IllegalStateException("Method incomplete");
+    }
+
+    public <T> void save(T coreStorageObject) {
+
+        String tableName = classToTableNameMap.get(coreStorageObject.getClass());
+        try {
+            getDatabaseHelper(tableName).save(coreStorageObject, tableName);
+        } catch (CoreStorageWriteException e) {
+            throw new CoreStorageSaveException(e);
         }
 
-        return SingletonHolder.singletonInstance;
+    }
+
+    public <T> void save(Iterable<T> coreStorageObjects) {
+
+        String tableName = null;
+        SqlHelper databaseHelper = null;
+
+        for (T coreStorageObject : coreStorageObjects) {
+            if (tableName == null) {
+                tableName = classToTableNameMap.get(coreStorageObject.getClass());
+                databaseHelper = getDatabaseHelper(tableName);
+            }
+            try {
+                databaseHelper.save(coreStorageObject, tableName);
+            } catch (CoreStorageWriteException e) {
+                throw new CoreStorageSaveException(e);
+            }
+        }
 
     }
+
+    public <T> boolean remove(T coreStorageObject) {
+
+        String tableName = classToTableNameMap.get(coreStorageObject.getClass());
+        Object keyValue;
+        try {
+            keyValue = classNameToPrimaryKeyGetterMap.get(tableName).invoke(coreStorageObject);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            throw new MalformedClassGetterException(coreStorageObject.getClass(), classNameToPrimaryKeyGetterMap.get(tableName), e);
+        }
+
+        return remove(keyValue.toString(), tableName);
+    }
+
+    public <T> long remove(Iterable<T> coreStorageObjects) {
+        throw new IllegalStateException("Method incomplete");
+    }
+
+    public <T> boolean remove(String key, Class<? extends T> coreStorageObjectClass) {
+        return remove(key, classToTableNameMap.get(coreStorageObjectClass));
+    }
+
+    private boolean remove(String key, String tableName) {
+        return getDatabaseHelper(tableName).delete(key, tableName);
+    }
+
+    private String getTableName(Class<?> coreStorageClass) {
+        String tableName = classToTableNameMap.get(coreStorageClass);
+
+        if (com.zva.android.commonLib.utils.StringUtils.isEmpty(tableName))
+            throw new CoreStorageClassNotCachedException(coreStorageClass);
+
+        return tableName;
+    }
+
+    private SqlHelper getDatabaseHelper(String tableName) {
+        return (classNameToDatabaseTypeMap.get(tableName) == DatabaseType.PRIVATE ? privateDatabaseSqlHelper : publicDatabaseSqlHelper);
+    }
+
+    //Delegate Methods
 
     @Override
     public String toString() {
@@ -343,10 +431,6 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
                 + ", classToTableNameMap=" + classToTableNameMap + ", " + "classNameToPrimaryKeySetterMap=" + classNameToPrimaryKeySetterMap + ", classNameToDatabaseTypeMap="
                 + classNameToDatabaseTypeMap + ", applicationContext=" + applicationContext + ", version=" + version + ", privateDatabaseSqlHelper=" + privateDatabaseSqlHelper
                 + ", publicDatabaseSqlHelper=" + publicDatabaseSqlHelper + '}';
-    }
-
-    public <T extends CoreStorageDao> T getDao(Class<? extends T> daoClass) {
-        throw new IllegalStateException("Method incomplete");
     }
 
     @Override
@@ -377,6 +461,30 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
     @Override
     public QueryPropertyType getQueryColumnType(String tableName, String queryColumnName) {
         return classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap.get(tableName).get(queryColumnName).getQueryPropertyType();
+    }
+
+    @Override
+    public <T> T inflateObject(final String tableName, byte[] serializedObject) throws SerializationException {
+        try {
+            //noinspection unchecked
+            return serializationService.inflate(serializedObject, (Class<? extends T>) CollectionUtils.find(classToTableNameMap.keySet(), new Filter<Class<?>>() {
+                @Override
+                public boolean test(Class<?> object) {
+                    return false;
+                }
+            }));
+        } catch (ClassCastException exception) {
+            throw new SerializationException(exception);
+        }
+    }
+
+    @Override
+    public <T> Object getQueryColumnValue(T coreStorageObject, String tableName, String columnName) {
+        try {
+            return classNameToPropertyNameToGetterMap.get(tableName).get(columnName).invoke(coreStorageObject);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            throw new MalformedClassGetterException(coreStorageObject.getClass().getName(), columnName, e);
+        }
     }
 
     private static class SingletonHolder {

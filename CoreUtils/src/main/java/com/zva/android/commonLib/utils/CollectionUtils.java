@@ -14,13 +14,12 @@ import com.zva.android.commonLib.utils.core.Transformer;
  */
 public class CollectionUtils {
 
-
     @Contract(pure = true, value = "null,_-> null; _,null->null")
-    public static <InputType, OutputType> List<OutputType> map(Iterable<InputType> inputList, Transformer<InputType, OutputType> transformer) {
+    public static <InputType, OutputType> List<? extends OutputType> map(Iterable<? extends InputType> inputList, Transformer<? super InputType, ? extends OutputType> transformer) {
 
         List<OutputType> resultList = new ArrayList<>();
 
-        if(inputList == null || transformer == null)
+        if (inputList == null || transformer == null)
             return null;
 
         for (InputType inputObject : inputList) {
@@ -34,7 +33,7 @@ public class CollectionUtils {
     }
 
     @Contract(pure = true, value = "null,_->null; _,null->null")
-    public static <T> List<T> filter(Iterable<T> inputList, Filter<T> filter) {
+    public static <T> List<? extends T> filter(Iterable<? extends T> inputList, Filter<? super T> filter) {
 
         List<T> resultList = new ArrayList<>();
 
@@ -51,19 +50,33 @@ public class CollectionUtils {
     }
 
     @Contract(pure = true, value = "null,_->null; _,null->null")
-    public static <T> List<T> apply(Iterable<T> inputList, Transformer<T, T> transformer) {
+    public static <T> List<? extends T> apply(Iterable<T> inputList, Transformer<T, T> transformer) {
         return map(inputList, transformer);
     }
 
     @Contract(pure = true, value = "null -> true")
-    public static <T> boolean isEmpty(Iterable<T> iterable) {
+    public static <T> boolean isEmpty(Iterable<? extends T> iterable) {
 
         if (iterable != null) {
-            Iterator<T> iterator = iterable.iterator();
+            Iterator<? extends T> iterator = iterable.iterator();
             if (iterator != null)
                 return iterator.hasNext();
         }
 
         return true;
+    }
+
+    @Contract(pure = true, value = "null, _->null; _, null->null")
+    public static <T> T find(Iterable<? extends T> objects, Filter<? super T> filter) {
+        if (objects == null || filter == null) {
+            return null;
+        }
+
+        for (T object : objects) {
+            if (filter.test(object))
+                return object;
+        }
+
+        return null;
     }
 }

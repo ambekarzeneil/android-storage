@@ -27,16 +27,7 @@ public class ApplicationTest extends ApplicationTestCase<Application> {
         super.tearDown();
     }
 
-    /*
-    public void testInternals() throws Exception {
-        Configuration configuration = Configuration.getDefaultConfiguration();
-        configuration.setBasePackageClasses(Collections.<Class<?>>singletonList(SimpleTestObject.class));
-        CoreStorageHelper.init(getApplication().getApplicationContext(), configuration);
-        Log.i(TAG, CoreStorageHelper.getInstance().toString());
-    }
-    */
-
-    public void testInternals() throws Exception {
+    public void testPackageWideLoading() throws Exception {
         CoreStorageHelper.init(getApplication().getApplicationContext());
         Log.i(TAG, CoreStorageHelper.getInstance().toString());
     }
