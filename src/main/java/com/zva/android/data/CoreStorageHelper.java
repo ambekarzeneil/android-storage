@@ -32,6 +32,7 @@ import com.zva.android.commonLib.utils.core.Filter;
 import com.zva.android.data.annotations.CoreStorageEntity;
 import com.zva.android.data.annotations.PrimaryKey;
 import com.zva.android.data.annotations.QueryColumn;
+import com.zva.android.data.core.QueryGroup;
 import com.zva.android.data.exception.CoreStorageClassNotCachedException;
 import com.zva.android.data.exception.CoreStorageFindException;
 import com.zva.android.data.exception.CoreStorageReadException;
@@ -44,10 +45,11 @@ import com.zva.android.data.interfaces.CoreStorageDao;
 /**
  * Copyright CoreStorage 2015 Created by zeneilambekar on 31/07/15.
  */
-public class CoreStorageHelper implements ISqlHelperDelegate {
+public class CoreStorageHelper {
 
     private static final String                                TAG                                                       = "DataHelper";
     private final SerializationService                         serializationService                                      = Serializers.getProtostuffSerializer();
+    private final PrivateSqlDelegate                           sqlDelegate                                               = new PrivateSqlDelegate();
     private volatile boolean                                   isReady;
     private Map<String, Map<String, QueryPropertyTypeWrapper>> classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap = new HashMap<>();
     private Map<String, String>                                classNameToPrimaryKeyFieldNameMap                         = new HashMap<>();
@@ -139,7 +141,7 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
         CoreStorageHelper instance = SingletonHolder.singletonInstance;
 
         SqlHelper.Builder privateDatabaseBuilder = SqlHelper.builder().setApplicationContext(instance.applicationContext).setDatabaseName(configuration.getDatabaseName()).setDatabasePath(
-                configuration.getDatabasePath()).setDatabaseVersion(instance.version).setSqlHelperDelegate(instance);
+                configuration.getDatabasePath()).setDatabaseVersion(instance.version).setSqlHelperDelegate(instance.sqlDelegate);
 
         SqlHelper.Builder publicDatabaseBuilder = privateDatabaseBuilder.copy();
 
@@ -347,6 +349,17 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
         }
     }
 
+    public <T> Set<T> find(Class<? extends T> coreStorageClass, QueryGroup queryGroup) {
+        String tableName = getTableName(coreStorageClass);
+
+        try {
+            return getDatabaseHelper(tableName).get(queryGroup, tableName);
+        } catch (SerializationException e) {
+            throw new CoreStorageFindException(e);
+        }
+
+    }
+
     public <T> Set<T> findAll(Class<?> coreStorageClass) {
         String tableName = getTableName(coreStorageClass);
         return getDatabaseHelper(tableName).getAll(tableName);
@@ -399,7 +412,11 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
         return remove(keyValue.toString(), tableName);
     }
 
-    public <T> long remove(Iterable<T> coreStorageObjects) {
+    public <T> long remove(Class<? extends T> coreStorageObjectClass, Iterable<T> coreStorageObjects) {
+        throw new IllegalStateException("Method incomplete");
+    }
+
+    public <T> long remove(Class<? extends T> coreStorageObjectClass, QueryGroup queryGroup) {
         throw new IllegalStateException("Method incomplete");
     }
 
@@ -449,65 +466,6 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
                 + ", publicDatabaseSqlHelper=" + publicDatabaseSqlHelper + '}';
     }
 
-    @Override
-    public String getSqlType(String tableName, String fieldName) {
-        return classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap.get(tableName).get(fieldName).getCustomSqlProperty();
-    }
-
-    @Override
-    public Set<String> getTableNames(final DatabaseType databaseType) {
-        return new LinkedHashSet<>(CollectionUtils.filter(classNameToDatabaseTypeMap.keySet(), new Filter<String>() {
-            @Override
-            public boolean test(String object) {
-                return classNameToDatabaseTypeMap.get(object) == databaseType;
-            }
-        }));
-    }
-
-    @Override
-    public String getPrimaryKeyFieldName(String tableName) {
-        return classNameToPrimaryKeyFieldNameMap.get(tableName);
-    }
-
-    @Override
-    public Set<String> getQueryColumnNames(String tableName) {
-        return classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap.get(tableName).keySet();
-    }
-
-    @Override
-    public QueryPropertyType getQueryColumnType(String tableName, String queryColumnName) {
-        return classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap.get(tableName).get(queryColumnName).getQueryPropertyType();
-    }
-
-    @Override
-    public <T> T inflateObject(final String tableName, byte[] serializedObject) throws SerializationException {
-        try {
-            //noinspection unchecked
-            return serializationService.inflate(serializedObject, (Class<? extends T>) CollectionUtils.find(classToTableNameMap.keySet(), new Filter<Class<?>>() {
-                @Override
-                public boolean test(Class<?> object) {
-                    return classToTableNameMap.get(object).equals(tableName);
-                }
-            }));
-        } catch (ClassCastException exception) {
-            throw new SerializationException(exception);
-        }
-    }
-
-    @Override
-    public <T> byte[] serializeObject(T coreStorageObject) throws SerializationException {
-        return serializationService.serialize(coreStorageObject);
-    }
-
-    @Override
-    public <T> Object getQueryColumnValue(T coreStorageObject, String tableName, String columnName) {
-        try {
-            return classNameToPropertyNameToGetterMap.get(tableName).get(columnName).invoke(coreStorageObject);
-        } catch (IllegalAccessException | InvocationTargetException e) {
-            throw new MalformedClassGetterException(coreStorageObject.getClass().getName(), columnName, e);
-        }
-    }
-
     private static class SingletonHolder {
         private static final CoreStorageHelper singletonInstance = new CoreStorageHelper();
     }
@@ -538,6 +496,68 @@ public class CoreStorageHelper implements ISqlHelperDelegate {
             dataHelper.version = version;
         }
 
+    }
+
+    private class PrivateSqlDelegate implements ISqlHelperDelegate {
+
+        @Override
+        public String getSqlType(String tableName, String fieldName) {
+            return classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap.get(tableName).get(fieldName).getCustomSqlProperty();
+        }
+
+        @Override
+        public Set<String> getTableNames(final DatabaseType databaseType) {
+            return new LinkedHashSet<>(CollectionUtils.filter(classNameToDatabaseTypeMap.keySet(), new Filter<String>() {
+                @Override
+                public boolean test(String object) {
+                    return classNameToDatabaseTypeMap.get(object) == databaseType;
+                }
+            }));
+        }
+
+        @Override
+        public String getPrimaryKeyFieldName(String tableName) {
+            return classNameToPrimaryKeyFieldNameMap.get(tableName);
+        }
+
+        @Override
+        public Set<String> getQueryColumnNames(String tableName) {
+            return classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap.get(tableName).keySet();
+        }
+
+        @Override
+        public QueryPropertyType getQueryColumnType(String tableName, String queryColumnName) {
+            return classNameToQueryPropertyNameToQueryPropertyTypeWrapperMap.get(tableName).get(queryColumnName).getQueryPropertyType();
+        }
+
+        @Override
+        public <T> T inflateObject(final String tableName, byte[] serializedObject) throws SerializationException {
+            try {
+                //noinspection unchecked
+                return serializationService.inflate(serializedObject, (Class<? extends T>) CollectionUtils.find(classToTableNameMap.keySet(), new Filter<Class<?>>() {
+                    @Override
+                    public boolean test(Class<?> object) {
+                        return classToTableNameMap.get(object).equals(tableName);
+                    }
+                }));
+            } catch (ClassCastException exception) {
+                throw new SerializationException(exception);
+            }
+        }
+
+        @Override
+        public <T> byte[] serializeObject(T coreStorageObject) throws SerializationException {
+            return serializationService.serialize(coreStorageObject);
+        }
+
+        @Override
+        public <T> Object getQueryColumnValue(T coreStorageObject, String tableName, String columnName) {
+            try {
+                return classNameToPropertyNameToGetterMap.get(tableName).get(columnName).invoke(coreStorageObject);
+            } catch (IllegalAccessException | InvocationTargetException e) {
+                throw new MalformedClassGetterException(coreStorageObject.getClass().getName(), columnName, e);
+            }
+        }
     }
 
 }

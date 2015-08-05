@@ -76,7 +76,7 @@ class SqlHelper extends SQLiteOpenHelper {
 
     }
 
-    public <T> Iterable<T> get(QueryGroup queryGroup, String tableName) throws SerializationException {
+    public <T> Set<T> get(QueryGroup queryGroup, String tableName) throws SerializationException {
         throw new IllegalStateException("Method incomplete");
     }
 
