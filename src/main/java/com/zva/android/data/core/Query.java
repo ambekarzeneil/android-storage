@@ -1,9 +1,11 @@
 package com.zva.android.data.core;
 
+import java.util.Collections;
+
 /**
  * Copyright CoreStorage 2015 Created by zeneilambekar on 01/08/15.
  */
-public class Query<PropertyType> {
+public class Query<PropertyType> implements IQueryResolver {
 
     private final PropertyType propertyValue;
 
@@ -20,6 +22,11 @@ public class Query<PropertyType> {
 
     public String getQueryString() {
         return queryString;
+    }
+
+    @Override
+    public ResolvedQuery resolveQuery() {
+        return new ResolvedQuery(queryString, Collections.singletonList((Object) propertyValue));
     }
 
     public class Builder {

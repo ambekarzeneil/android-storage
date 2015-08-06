@@ -5,7 +5,7 @@ import java.util.Set;
 /**
  * Copyright CoreStorage 2015 Created by zeneilambekar on 02/08/15.
  */
-public class QueryGroup {
+public class QueryGroup implements IQueryResolver {
 
     Set<Query<?>>   queries;
 
@@ -28,6 +28,21 @@ public class QueryGroup {
         queryGroup.queryGroups = queryGroups;
         queryGroup.and = and;
         return queryGroup;
+    }
+
+    @Override
+    public ResolvedQuery resolveQuery() {
+
+        if (queryGroups == null && queries == null)
+            return null;
+
+        ResolvedQuery.Builder builder = ResolvedQuery.Builder.newBuilder();
+
+        for (IQueryResolver queryResolver : queryGroups == null ? queries : queryGroups) {
+            builder.addResolvedQuery(queryResolver.resolveQuery(), and);
+        }
+
+        return builder.build();
     }
 
     public Set<Query<?>> getQueries() {
