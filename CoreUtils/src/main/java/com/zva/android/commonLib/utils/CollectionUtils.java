@@ -15,7 +15,7 @@ import com.zva.android.commonLib.utils.core.Transformer;
 public class CollectionUtils {
 
     @Contract(pure = true, value = "null,_-> null; _,null->null")
-    public static <InputType, OutputType> List<? extends OutputType> map(Iterable<? extends InputType> inputList, Transformer<? super InputType, ? extends OutputType> transformer) {
+    public static <InputType, OutputType> List<OutputType> map(Iterable<? extends InputType> inputList, Transformer<? super InputType, ? extends OutputType> transformer) {
 
         List<OutputType> resultList = new ArrayList<>();
 

@@ -15,7 +15,9 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
 import com.zva.android.commonLib.serialization.exception.SerializationException;
+import com.zva.android.commonLib.utils.CollectionUtils;
 import com.zva.android.commonLib.utils.ObjectWrapper;
+import com.zva.android.commonLib.utils.core.Transformer;
 import com.zva.android.data.core.QueryGroup;
 import com.zva.android.data.exception.CoreStorageReadException;
 import com.zva.android.data.exception.CoreStorageWriteException;
@@ -123,6 +125,35 @@ class SqlHelper extends SQLiteOpenHelper {
 
     }
 
+    public <ID extends Serializable> long delete(Set<ID> keys, final String tableName) throws CoreStorageWriteException {
+
+        List<? extends String> keyStrings = CollectionUtils.map(keys, new Transformer<ID, String>() {
+            @Override
+            public String transform(ID input) {
+                return input.toString();
+            }
+        });
+
+        final String[] params = keyStrings.toArray(new String[keyStrings.size()]);
+        final long result[] = new long[]{0};
+        final String placeholders = makePlaceholders(params.length);
+        final String primaryKeyFieldName = sqlHelperDelegate.getPrimaryKeyFieldName(tableName);
+
+        try {
+            runInTransaction(true, new TransactionTask() {
+                @Override
+                public void run() throws Exception {
+                    result[0] = targetDb.delete(tableName, String.format("%s IN (%s)", primaryKeyFieldName,placeholders), params);
+                }
+            });
+        } catch (CoreStorageReadException e) {
+            throw new IllegalStateException("Read Exception during deleting", e);
+        }
+
+        return result[0];
+
+    }
+
     private void runCreateIfNotExistsQuery(SQLiteDatabase sqLiteDatabase) {
 
         for (String tableName : sqlHelperDelegate.getTableNames(databaseType)) {
@@ -217,6 +248,7 @@ class SqlHelper extends SQLiteOpenHelper {
                 try {
                     Thread.sleep(1);
                 } catch (InterruptedException e1) {
+                    Thread.currentThread().interrupt();
                     return;
                 }
                 continue;
@@ -290,6 +322,15 @@ class SqlHelper extends SQLiteOpenHelper {
 
         return result[0];
 
+    }
+
+    private String makePlaceholders(int size) {
+        StringBuilder stringBuilder = new StringBuilder();
+        for (int i = 0; i < size; i++) {
+            stringBuilder.append("?,");
+        }
+
+        return stringBuilder.substring(0, stringBuilder.length() - 1);
     }
 
     public static class Builder implements Cloneable {

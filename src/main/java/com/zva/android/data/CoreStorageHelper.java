@@ -15,8 +15,6 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Contract;
 
 import android.content.Context;
@@ -27,7 +25,9 @@ import com.zva.android.commonLib.serialization.SerializationService;
 import com.zva.android.commonLib.serialization.exception.SerializationException;
 import com.zva.android.commonLib.serialization.impl.Serializers;
 import com.zva.android.commonLib.utils.CollectionUtils;
+import com.zva.android.commonLib.utils.IoUtils;
 import com.zva.android.commonLib.utils.PackageUtils;
+import com.zva.android.commonLib.utils.StringUtils;
 import com.zva.android.commonLib.utils.core.Filter;
 import com.zva.android.data.annotations.CoreStorageEntity;
 import com.zva.android.data.annotations.PrimaryKey;
@@ -268,6 +268,7 @@ public class CoreStorageHelper {
 
     }
 
+    @Contract(pure = true)
     private static QueryPropertyType getQueryPropertyType(Class<?> type) {
         if (type.isAssignableFrom(String.class))
             return QueryPropertyType.STRING;
@@ -288,6 +289,7 @@ public class CoreStorageHelper {
 
     }
 
+    @Contract(pure = true)
     private static Method getMethodForProperty(Class<?> concernedClass, String fieldName, Class<?> type, boolean getter) throws NoSuchMethodException {
 
         Log.i(TAG, (getter ? "get" : "set") + StringUtils.capitalize(fieldName));
@@ -315,7 +317,7 @@ public class CoreStorageHelper {
 
         try {
             SerializationService serializer = Serializers.getJavaSerializer();
-            byte[] bytes = IOUtils.toByteArray(applicationContext.openFileInput("dataHelperMetaDataStore"));
+            byte[] bytes = IoUtils.toByteArray(applicationContext.openFileInput("dataHelperMetaDataStore"));
 
             store = serializer.inflate(bytes, Store.class);
         } catch (FileNotFoundException e) {
@@ -400,20 +402,40 @@ public class CoreStorageHelper {
     }
 
     public <T> boolean remove(T coreStorageObject) {
-
         String tableName = classToTableNameMap.get(coreStorageObject.getClass());
-        Object keyValue;
+        return remove(getKeyValue(tableName, coreStorageObject).toString(), tableName);
+    }
+
+    public <T> long remove(Iterable<T> coreStorageObjects, Class<? extends T> coreStorageObjectClass) {
+        String tableName = classToTableNameMap.get(coreStorageObjectClass);
+
+        Set<? super Serializable> keys = new LinkedHashSet<>();
+
+        for (T coreStorageObject : coreStorageObjects)
+            keys.add(getKeyValue(tableName, coreStorageObject));
+
         try {
-            keyValue = classNameToPrimaryKeyGetterMap.get(tableName).invoke(coreStorageObject);
+            return getDatabaseHelper(tableName).delete((Set) keys, tableName);
+        } catch (CoreStorageWriteException e) {
+            throw new CoreStorageRemoveException(e);
+        }
+    }
+
+    @Contract(pure = true)
+    private <T, ID extends Serializable> ID getKeyValue(String tableName, T coreStorageObject) {
+        try {
+            Object keyValue = classNameToPrimaryKeyGetterMap.get(tableName).invoke(coreStorageObject);
+
+            if (keyValue instanceof Serializable) {
+                //noinspection unchecked
+                return (ID) keyValue;
+            }
+
+            throw new IllegalStateException(String.format("PrimaryKey for class '%s' is not serializable", coreStorageObject.getClass()));
+
         } catch (IllegalAccessException | InvocationTargetException e) {
             throw new MalformedClassGetterException(coreStorageObject.getClass(), classNameToPrimaryKeyGetterMap.get(tableName), e);
         }
-
-        return remove(keyValue.toString(), tableName);
-    }
-
-    public <T> long remove(Class<? extends T> coreStorageObjectClass, Iterable<T> coreStorageObjects) {
-        throw new IllegalStateException("Method incomplete");
     }
 
     public <T> long remove(Class<? extends T> coreStorageObjectClass, QueryGroup queryGroup) {
@@ -441,6 +463,7 @@ public class CoreStorageHelper {
         }
     }
 
+    @Contract(pure = true)
     private String getTableName(Class<?> coreStorageClass) {
         String tableName = classToTableNameMap.get(coreStorageClass);
 
@@ -450,6 +473,7 @@ public class CoreStorageHelper {
         return tableName;
     }
 
+    @Contract(pure = true)
     private SqlHelper getDatabaseHelper(String tableName) {
         return (classNameToDatabaseTypeMap.get(tableName) == DatabaseType.PRIVATE ? privateDatabaseSqlHelper : publicDatabaseSqlHelper);
     }
