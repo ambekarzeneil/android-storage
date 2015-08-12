@@ -356,7 +356,7 @@ public class CoreStorageHelper {
 
         try {
             return getDatabaseHelper(tableName).get(queryGroup, tableName);
-        } catch (SerializationException e) {
+        } catch (SerializationException | CoreStorageReadException e) {
             throw new CoreStorageFindException(e);
         }
 

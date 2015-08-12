@@ -1,6 +1,8 @@
 package com.zva.android.commonLib.utils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 
@@ -79,4 +81,25 @@ public class CollectionUtils {
 
         return null;
     }
+
+    @SafeVarargs
+    @Contract(pure = true, value = "null, _ -> false; _, null -> false")
+    public static <T> boolean containsOnly(Iterable<T> iterable, T... containedElements) {
+
+        if (iterable == null || containedElements == null)
+            return false;
+
+        final HashSet<T> remainingContainedElements = new HashSet<>(Arrays.asList(containedElements));
+
+        for (T t : iterable) {
+            if (remainingContainedElements.contains(t)) {
+                remainingContainedElements.remove(t);
+                continue;
+            }
+            return false;
+        }
+
+        return remainingContainedElements.size() == 0;
+    }
+
 }

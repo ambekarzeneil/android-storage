@@ -2,6 +2,7 @@ package com.zva.android.data;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -19,6 +20,7 @@ import com.zva.android.commonLib.utils.CollectionUtils;
 import com.zva.android.commonLib.utils.ObjectWrapper;
 import com.zva.android.commonLib.utils.core.Transformer;
 import com.zva.android.data.core.QueryGroup;
+import com.zva.android.data.core.ResolvedQuery;
 import com.zva.android.data.exception.CoreStorageReadException;
 import com.zva.android.data.exception.CoreStorageWriteException;
 
@@ -78,8 +80,34 @@ class SqlHelper extends SQLiteOpenHelper {
 
     }
 
-    public <T> Set<T> get(QueryGroup queryGroup, String tableName) throws SerializationException {
-        throw new IllegalStateException("Method incomplete");
+    public <T> Set<T> get(QueryGroup queryGroup, final String tableName) throws SerializationException, CoreStorageReadException {
+
+        final ResolvedQuery resolvedQuery = queryGroup.resolveQuery();
+        final Set<T> objectSet = new HashSet<>();
+        try {
+            runInTransaction(false, new TransactionTask() {
+                @Override
+                public void run() throws Exception {
+                    Cursor cursor = targetDb.query(tableName, new String[] { "serialized_object" }, resolvedQuery.getQuery(), resolvedQuery.getParams(), null, null, null);
+
+                    if (cursor.moveToFirst()) {
+                        while (!cursor.isAfterLast()) {
+                            objectSet.add(sqlHelperDelegate.<T> inflateObject(tableName, cursor.getBlob(cursor.getColumnIndex("serialized_object"))));
+
+                            cursor.moveToNext();
+                        }
+                    }
+
+                    cursor.close();
+
+                }
+            });
+        } catch (CoreStorageWriteException e) {
+            throw new IllegalStateException("Write exception during get", e);
+        }
+
+        return objectSet;
+
     }
 
     public <T> Set<T> getAll(String tableName) {

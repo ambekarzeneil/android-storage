@@ -7,6 +7,9 @@ import java.util.List;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 
+import com.zva.android.commonLib.utils.CollectionUtils;
+import com.zva.android.commonLib.utils.core.Transformer;
+
 /**
  * Copyright CoreStorage 2015 Created by zeneilambekar on 06/08/15.
  */
@@ -24,8 +27,13 @@ public class ResolvedQuery {
         return query;
     }
 
-    public Object[] getParams() {
-        return params.toArray(new Object[params.size()]);
+    public String[] getParams() {
+        return CollectionUtils.map(params, new Transformer<Object, String>() {
+            @Override
+            public String transform(Object input) {
+                return input.toString();
+            }
+        }).toArray(new String[params.size()]);
     }
 
     static class Builder {
@@ -47,8 +55,8 @@ public class ResolvedQuery {
             return this;
         }
 
-        public ResolvedQuery build() {
-            return new ResolvedQuery(String.format("(%s)", query.toString()), params);
+        public ResolvedQuery build(boolean and) {
+            return new ResolvedQuery(String.format("(%s)", query.substring(0, query.length() - (and ? 5 : 4))), params);
         }
 
     }

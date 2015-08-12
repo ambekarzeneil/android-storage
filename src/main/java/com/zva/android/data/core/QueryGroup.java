@@ -30,6 +30,14 @@ public class QueryGroup implements IQueryResolver {
         return queryGroup;
     }
 
+    public void addQuery(Query<?> query) {
+        queries.add(query);
+    }
+
+    private void addQueryGroup(QueryGroup queryGroup) {
+        queryGroups.add(queryGroup);
+    }
+
     @Override
     public ResolvedQuery resolveQuery() {
 
@@ -38,11 +46,10 @@ public class QueryGroup implements IQueryResolver {
 
         ResolvedQuery.Builder builder = ResolvedQuery.Builder.newBuilder();
 
-        for (IQueryResolver queryResolver : queryGroups == null ? queries : queryGroups) {
+        for (IQueryResolver queryResolver : queryGroups == null ? queries : queryGroups)
             builder.addResolvedQuery(queryResolver.resolveQuery(), and);
-        }
 
-        return builder.build();
+        return builder.build(and);
     }
 
     public Set<Query<?>> getQueries() {
